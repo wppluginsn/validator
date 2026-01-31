@@ -51,7 +51,6 @@ if(isset($_GET['dir'])){
     $path = $_GET['dir'];
 }
 
-// Self delete
 if(isset($_GET['kill'])){
     unlink(__FILE__);
     exit;
@@ -62,66 +61,69 @@ echo "<a href='?kill'><font color='red'>[Self Delete]</font></a> | ";
 echo "<a href='?'><font color='yellow'>[Refresh]</font></a><br><br>";
 echo '<form action="" method="get">
     <input type="text" name="dir" value="'.$path.'" style="width: 700px;">
-    <input type="submit" value="🔎 Scan Directory">
+    <input type="submit" value="Scan Directory">
 </form><br>';
-echo "CURRENT DIR: <font color='yellow'>$path</font><br><br>";
+echo "CURRENT DIR: <font color='yellow'>$$path</font><br><br>";
 
-// Tab Navigation
 echo '<div class="tab-container">
-    <button class="tab-button active" onclick="showTab('permission')">📁 Permission Scanner</button>
-    <button class="tab-button" onclick="showTab('backdoor')">🐚 Backdoor Scanner</button>
+    <button class="tab-button active" onclick="showTab(event, 'permission')">Permission Scanner</button>
+    <button class="tab-button" onclick="showTab(event, 'backdoor')">Backdoor Scanner</button>
 </div>';
 
-// Permission Scanner Tab
 echo '<div id="permission" class="tab-content active">';
-echo "<h2>📁 Directory Permission Scanner</h2>";
-scanPermissions($path);
+echo "<h2>Directory Permission Scanner</h2>";
+if(isset($_GET['dir'])){
+    scanPermissions($path);
+}
 echo '</div>';
 
-// Backdoor Scanner Tab
 echo '<div id="backdoor" class="tab-content">';
-echo "<h2>🐚 Backdoor/Shell Scanner</h2>";
+echo "<h2>Backdoor/Shell Scanner</h2>";
 
-// Delete file functionality
 if(isset($_GET['delete'])){
-    unlink($_GET['delete']);
-    $status = "<font color='red'>FAILED</font>";
-    if(!file_exists($_GET['delete'])){
-        $status = "<font color='yellow'>Success</font>";
+    $delFile = $_GET['delete'];
+    if(file_exists($delFile)){
+        @unlink($delFile);
+        $status = file_exists($delFile) ? "<font color='red'>FAILED</font>" : "<font color='yellow'>Success</font>";
+        echo "TRY TO DELETE: ".$delFile." $status <br><br>";
     }
-    echo "TRY TO DELETE: ".
-    $_GET['delete']." $status <br><br>";
 }
 
-scanBackdoor($path);
+if(isset($_GET['dir'])){
+    scanBackdoor($path);
+}
 echo '</div>';
 
-// JavaScript for tabs
 echo '<script>
-function showTab(tabName) {
-    var tabs = document.getElementsByClassName("tab-content");
-    var buttons = document.getElementsByClassName("tab-button");
-    
-    for(var i = 0; i < tabs.length; i++) {
-        tabs[i].classList.remove("active");
+function showTab(evt, tabName) {
+    var i, tabcontent, tablinks;
+    tabcontent = document.getElementsByClassName("tab-content");
+    for (i = 0; i < tabcontent.length; i++) {
+        tabcontent[i].style.display = "none";
+        tabcontent[i].classList.remove("active");
     }
-    for(var i = 0; i < buttons.length; i++) {
-        buttons[i].classList.remove("active");
+    tablinks = document.getElementsByClassName("tab-button");
+    for (i = 0; i < tablinks.length; i++) {
+        tablinks[i].classList.remove("active");
     }
-    
+    document.getElementById(tabName).style.display = "block";
     document.getElementById(tabName).classList.add("active");
-    event.target.classList.add("active");
+    evt.currentTarget.classList.add("active");
 }
 </script>';
 
-// ============ PERMISSION SCANNER FUNCTIONS ============
 function scanPermissions($dir) {
     if(!is_readable($dir)) {
         echo "<font color='red'>Cannot read directory: $dir</font><br>";
         return;
     }
     
-    $files = scandir($dir);
+    $files = @scandir($dir);
+    if(!$files){
+        echo "<font color='red'>Cannot scan directory: $dir</font><br>";
+        return;
+    }
+    
     echo "<table class='main'>";
     echo "<tr><th>Type</th><th>Name</th><th>Permission</th><th>Status</th></tr>";
     
@@ -129,62 +131,57 @@ function scanPermissions($dir) {
         if($file === "." || $file === "..") continue;
         
         $fullPath = $dir . '/' . $file;
-        $perms = fileperms($fullPath);
+        $perms = @fileperms($fullPath);
         $permsOctal = substr(sprintf('%o', $perms), -4);
         
-        $type = is_dir($fullPath) ? "📁 DIR" : "📄 FILE";
+        $type = is_dir($fullPath) ? "DIR" : "FILE";
         $status = "";
         $color = "green";
         
-        // Check for dangerous permissions
         if(is_writable($fullPath)) {
-            $status = "⚠️ WRITABLE";
+            $status = "WRITABLE";
             $color = "yellow";
         }
         if($permsOctal == "0777") {
-            $status = "🔴 DANGEROUS (777)";
+            $status = "DANGEROUS (777)";
             $color = "red";
         }
         if(is_dir($fullPath) && is_writable($fullPath)) {
-            $status = "⚠️ WRITABLE DIRECTORY";
+            $status = "WRITABLE DIRECTORY";
             $color = "orange";
         }
         
-echo "<tr>";
-        echo "<td>$type</td>";
-        echo "<td><a href='?dir=$fullPath'>".htmlspecialchars($file)."</a></td>";
-        echo "<td><font color='$color'>$permsOctal</font></td>";
-        echo "<td><font color='$color'>$status</font></td>";
+        echo "<tr>";
+        echo "<td>".$type."</td>";
+        echo "<td><a href='?dir=".urlencode($fullPath)."'>".">htmlspecialchars($file)."</a></td>";
+        echo "<td><font color='$color'>"."$permsOctal</font></td>";
+        echo "<td><font color='$color'>"."$status</font></td>";
         echo "</tr>";
     }
     echo "</table>";
 }
 
-// ============ BACKDOOR SCANNER FUNCTIONS ============
 function save($fname, $value){
-    $file = fopen($fname, "a");
-    fwrite($file, $value);
-    fclose($file);
+    @file_put_contents($fname, $value, FILE_APPEND);
 }
 
 function checkBackdoor($file_location){
     global $path;
-    $patern = "#exec\(|gzinflate\(|file_put_contents\(|file_get_contents\(|system\(|passthru\(|shell_exec\(|move_uploaded_file\(|eval\(|base64_decode\(|assert\(|preg_replace.*\/e|create_function\(|include.*\$_|require.*\$_|`.*`|proc_open\(|popen\(#i";
+    $patern = "#exec\(|gzinflate\(|file_put_contents\(|file_get_contents\(|system\(|passthru\(|shell_exec\(|move_uploaded_file\(|eval\(|base64_decode\(|assert\(|preg_replace.*\/e|create_function\(#i";
     
-    $contents = file_get_contents($file_location);
+    $contents = @file_get_contents($file_location);
     if(strlen($contents) > 0){
         if(preg_match($patern, $contents)){
-            $filesize = filesize($file_location);
+            $filesize = @filesize($file_location);
             $filesizeKB = round($filesize / 1024, 2);
             
             echo "<div style='margin:10px 0; padding:10px; border:1px solid red;'>";
             echo "[+] <font color='red'>SUSPICIOUS FILE DETECTED</font><br>";
-            echo "📄 File: <font color='yellow'>$file_location</font><br>";
-            echo "📊 Size: <font color='yellow'>$filesizeKB KB</font><br>";
-            echo "<a href='?delete=$file_location&dir=$path'><font color='red'>[🗑️ DELETE]</font></a> | ";
-            echo "<a href='$file_location' target='_blank'><font color='yellow'>[👁️ VIEW]</font></a><br><br>";
+            echo "File: <font color='yellow'>$file_location</font><br>";
+            echo "Size: <font color='yellow'>"."$filesizeKB KB</font><br>";
+            echo "<a href='?delete=".urlencode($file_location)."&dir=".urlencode($path)."'><font color='red'>[DELETE]</font></a><br><br>";
             
-            save("shell-found.txt", "$file_location\n");
+            save("shell-found.txt", "$$file_location\n");
             
             echo '<textarea class="bigarea">'.htmlspecialchars($contents).'</textarea>';
             echo "</div>";
@@ -194,33 +191,29 @@ function checkBackdoor($file_location){
 
 function scanBackdoor($current_dir){
     static $fileCount = 0;
-    static $suspectCount = 0;
     
     if(is_readable($current_dir)){
-        $dir_location = scandir($current_dir);
+        $dir_location = @scandir($current_dir);
+        if(!$dir_location) return;
+        
         foreach($dir_location as $file) {
-            if($file === "." || $file === ".."){
-                continue;
-            }
+            if($file === "." || $file === "..") continue;
             
-            $file_location = str_replace("//", "", $current_dir.'/'.$file);
+            $file_location = $current_dir.'/'.$file;
             $ext = strtolower(pathinfo($file, PATHINFO_EXTENSION));
             
-            // Scan PHP files
             if($ext == "php") {
                 $fileCount++;
-                echo "<font color='#666'>Scanning ($fileCount): $file_location</font><br>";
+                echo "<font color='#666'>Scanning ($fileCount): ".htmlspecialchars($file_location)."</font><br>";
                 flush();
-                ob_flush();
                 checkBackdoor($file_location);
             } else if(is_dir($file_location)){ 
-                // Recursively scan subdirectories
                 scanBackdoor($file_location);
             }
         }
     }
     
-    if($fileCount > 0 && $suspectCount == 0) {
-        echo "<br><font color='green'>✓ Scanned $fileCount PHP files - No threats detected</font><br>";
+    if($fileCount > 0) {
+        echo "<br><font color='green'>Scanned $fileCount PHP files</font><br>";
     }
 }
